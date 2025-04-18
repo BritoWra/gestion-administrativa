@@ -8,16 +8,16 @@ interface GestionCargosProps {
   onLogout: () => void;
 }
 
-// Define Cargo type
+// Define Cargo type to match backend model
 interface Cargo {
-  id: string; // Add an ID for key prop and editing/deleting
-  cargo: string;
-  nivel: string; // Can be string like 'Junior', 'Senior' or number
-  sueldoBase: number;
-  cantidad: number; // Number of employees in this position
+  id: number;
+  nombre: string;
+  nivel: number;
+  sueldo_base: number;
+  estatus: number;
 }
 
-// Define sort direction and criteria structure (can be reused)
+// Define sort direction and criteria structure
 type SortDirection = 'asc' | 'desc';
 interface SortCriterion<T> {
   key: keyof T;
@@ -26,27 +26,19 @@ interface SortCriterion<T> {
 
 // Default empty state for the form
 const defaultFormState: Partial<Cargo> = {
-  id: '',
-  cargo: '',
-  nivel: '',
-  sueldoBase: undefined,
-  cantidad: undefined,
+  nombre: '',
+  nivel: undefined,
+  sueldo_base: undefined,
 };
 
-// Dummy data for the table
-const dummyCargos: Cargo[] = [
-  { id: 'c1', cargo: 'Desarrollador Frontend', nivel: 'Junior', sueldoBase: 900, cantidad: 5 },
-  { id: 'c2', cargo: 'Desarrollador Backend', nivel: 'Senior', sueldoBase: 1180, cantidad: 3 },
-  { id: 'c3', cargo: 'Diseñador UX/UI', nivel: 'Semi-Senior', sueldoBase: 600, cantidad: 2 },
-  { id: 'c4', cargo: 'Gerente de Proyecto', nivel: 'N/A', sueldoBase: 800, cantidad: 1 },
-];
+// API Base URL
+const API_BASE_URL = 'http://127.0.0.1:5001/api';
 
 // Define columns for filtering
 const filterableColumns: { key: keyof Cargo; label: string }[] = [
-  { key: 'cargo', label: 'Cargo' },
+  { key: 'nombre', label: 'Nombre' },
   { key: 'nivel', label: 'Nivel' },
-  { key: 'sueldoBase', label: 'Sueldo Base' },
-  { key: 'cantidad', label: 'Cantidad' },
+  { key: 'sueldo_base', label: 'Sueldo Base' },
 ];
 
 const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
@@ -56,7 +48,34 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCargo, setEditingCargo] = useState<Cargo | null>(null);
   const [formData, setFormData] = useState<Partial<Cargo>>(defaultFormState);
-  const [sortCriteria, setSortCriteria] = useState<SortCriterion<Cargo>[]>([]); // State for sorting
+  const [sortCriteria, setSortCriteria] = useState<SortCriterion<Cargo>[]>([]);
+  const [cargos, setCargos] = useState<Cargo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Efecto para cargar los cargos al montar el componente
+  useEffect(() => {
+    fetchCargos();
+  }, []);
+
+  // Función para obtener todos los cargos
+  const fetchCargos = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/get/cargos`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      setCargos(data);
+    } catch (error) {
+      console.error("Error fetching cargos:", error);
+      setError('Error al cargar los datos de los cargos. Por favor, inténtelo de nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Effect to reset form when modal closes
   useEffect(() => {
@@ -78,22 +97,49 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
 
   const closeModal = () => setIsModalOpen(false);
 
-  const handleEdit = (id: string) => {
-    const cargoToEdit = dummyCargos.find(cargo => cargo.id === id);
+  const handleEdit = (id: number) => {
+    const cargoToEdit = cargos.find(cargo => cargo.id === id);
     if (cargoToEdit) {
       setEditingCargo(cargoToEdit);
-      setFormData(cargoToEdit);
+      setFormData({
+        nombre: cargoToEdit.nombre,
+        nivel: cargoToEdit.nivel,
+        sueldo_base: cargoToEdit.sueldo_base
+      });
       setIsModalOpen(true);
     }
   };
 
-  const handleDelete = (id: string) => {
-    console.log(`Eliminar cargo con ID: ${id}`);
-    // Add actual delete logic later
+  // Función para eliminar un cargo
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('¿Está seguro de que desea eliminar este cargo?')) {
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/delete/cargos/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Error al eliminar el cargo. Estado: ${response.status}`);
+      }
+
+      // Actualizar la lista de cargos eliminando el cargo
+      setCargos(prevCargos => prevCargos.filter(cargo => cargo.id !== id));
+    } catch (error: any) {
+      console.error("Error deleting cargo:", error);
+      setError(`Error al eliminar el cargo: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleFormChange = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = event.target;
+    // Convertir a número si es un campo numérico
     const processedValue = type === 'number' ? parseFloat(value) || 0 : value;
 
     setFormData(prevData => ({
@@ -102,21 +148,70 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
     }));
   };
 
-  const handleFormSubmit = (event: React.FormEvent) => {
+  // Función para enviar el formulario (crear/actualizar cargo)
+  const handleFormSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (editingCargo) {
-      console.log("Actualizando cargo:", formData);
-      // Later: Update dummyCargos state, call API
-    } else {
-      // Generate a temporary ID for the new cargo (replace with real ID from backend later)
-      const newCargo = { ...formData, id: `temp_${Date.now()}` }; 
-      console.log("Añadiendo nuevo cargo:", newCargo);
-      // Later: Add to dummyCargos state, call API
+    setLoading(true);
+    setError(null);
+
+    // Convertir nivel y sueldo_base a números si son string
+    const dataToSend = {
+      ...formData,
+      nivel: Number(formData.nivel),
+      sueldo_base: Number(formData.sueldo_base)
+    };
+
+    try {
+      let response;
+      
+      if (editingCargo) {
+        // Actualizar cargo existente
+        response = await fetch(`${API_BASE_URL}/put/cargos/${editingCargo.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(dataToSend),
+        });
+      } else {
+        // Crear nuevo cargo
+        response = await fetch(`${API_BASE_URL}/add/cargos`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(dataToSend),
+        });
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("API Error Response:", errorText);
+        throw new Error(`Error HTTP: ${response.status}`);
+      }
+
+      const savedCargo = await response.json();
+
+      // Actualizar la lista de cargos
+      if (editingCargo) {
+        setCargos(prevCargos => prevCargos.map(cargo => 
+          cargo.id === savedCargo.id ? savedCargo : cargo
+        ));
+      } else {
+        setCargos(prevCargos => [...prevCargos, savedCargo]);
+      }
+
+      // Cerrar el modal y resetear el formulario
+      closeModal();
+    } catch (error: any) {
+      console.error('Error submitting form:', error);
+      setError(`Error: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
-    closeModal();
   };
 
-  // Function to handle clicking on table headers for sorting (similar to GestionEmpleados)
+  // Function to handle clicking on table headers for sorting
   const handleSort = (key: keyof Cargo) => {
     setSortCriteria(prevCriteria => {
       const existingIndex = prevCriteria.findIndex(c => c.key === key);
@@ -147,13 +242,13 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
     return criterion.direction === 'asc' ? <FaSortUp /> : <FaSortDown />;
   };
 
+  // Filtrado y ordenamiento de cargos
   const filteredCargos = useMemo(() => {
     // 1. Filtering
-    let filtered = dummyCargos;
-    if (!filterValue) {
-      // Skip filtering if value is empty
-    } else {
-      filtered = dummyCargos.filter(cargo => {
+    let filtered = [...cargos];
+    
+    if (filterValue.trim() !== '') {
+      filtered = filtered.filter(cargo => {
         const value = cargo[filterColumn];
         const valueString = String(value).toLowerCase();
         return valueString.includes(filterValue.toLowerCase());
@@ -188,7 +283,7 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
     }
 
     return filtered;
-  }, [filterColumn, filterValue, sortCriteria]); // Add sortCriteria dependency
+  }, [cargos, filterColumn, filterValue, sortCriteria]);
 
   return (
     <section className="section" style={{ position: 'relative', minHeight: '100vh' }}>
@@ -203,6 +298,14 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
           <span className="icon"><FaBars /></span>
         </button>
       </div>
+
+      {/* Error Message Display */}
+      {error && (
+        <div className="notification is-danger" style={{ position: 'fixed', top: '70px', right: '20px', zIndex: 50 }}>
+          <button className="delete" onClick={() => setError(null)}></button>
+          {error}
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="container mt-6 pt-5">
@@ -248,23 +351,29 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
           </div>
         </div>
 
+        {/* Loading indicator */}
+        {loading && (
+          <div className="has-text-centered my-4">
+            <span className="icon is-large has-text-primary">
+              <i className="fas fa-spinner fa-pulse fa-2x"></i>
+            </span>
+          </div>
+        )}
+
         {/* Table */}
         <div className="table-container">
           <table className="table is-fullwidth is-striped is-hoverable">
             <thead>
               <tr>
                 {/* Make headers clickable for sorting */}
-                <th onClick={() => handleSort('cargo')} style={{ cursor: 'pointer' }}>
-                  Cargo <span className="icon is-small">{getSortIcon('cargo')}</span>
+                <th onClick={() => handleSort('nombre')} style={{ cursor: 'pointer' }}>
+                  Nombre <span className="icon is-small">{getSortIcon('nombre')}</span>
                 </th>
                 <th onClick={() => handleSort('nivel')} style={{ cursor: 'pointer' }}>
                   Nivel <span className="icon is-small">{getSortIcon('nivel')}</span>
                 </th>
-                <th onClick={() => handleSort('sueldoBase')} style={{ cursor: 'pointer' }}>
-                  Sueldo Base (USD) <span className="icon is-small">{getSortIcon('sueldoBase')}</span>
-                </th>
-                <th onClick={() => handleSort('cantidad')} style={{ cursor: 'pointer' }}>
-                  Cantidad <span className="icon is-small">{getSortIcon('cantidad')}</span>
+                <th onClick={() => handleSort('sueldo_base')} style={{ cursor: 'pointer' }}>
+                  Sueldo Base (USD) <span className="icon is-small">{getSortIcon('sueldo_base')}</span>
                 </th>
                 <th>Acciones</th>
               </tr>
@@ -273,11 +382,10 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
               {filteredCargos.length > 0 ? (
                 filteredCargos.map((cargo) => (
                   <tr key={cargo.id}>
-                    <td>{cargo.cargo}</td>
+                    <td>{cargo.nombre}</td>
                     <td>{cargo.nivel}</td>
                     {/* Format currency */} 
-                    <td>{cargo.sueldoBase.toLocaleString('es-ES', { style: 'currency', currency: 'USD' })}</td>
-                    <td>{cargo.cantidad}</td>
+                    <td>{cargo.sueldo_base.toLocaleString('es-ES', { style: 'currency', currency: 'USD' })}</td>
                     <td>
                       <button
                         className="button is-small is-info mr-1"
@@ -296,7 +404,13 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="has-text-centered">No se encontraron cargos con los filtros aplicados.</td>
+                  <td colSpan={4} className="has-text-centered">
+                    {loading 
+                      ? 'Cargando...'
+                      : filteredCargos.length === 0 && cargos.length > 0 
+                        ? 'No se encontraron cargos con los filtros aplicados.'
+                        : 'No hay cargos registrados.'}
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -314,23 +428,20 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
           </header>
           <section className="modal-card-body">
             <form id="cargo-form" onSubmit={handleFormSubmit}>
-              {/* Cargo */} 
+              {/* Nombre del Cargo */} 
               <div className="field">
-                <label className="label">Cargo</label>
+                <label className="label">Nombre</label>
                 <div className="control">
                   <input
                     className="input"
                     type="text"
-                    name="cargo"
+                    name="nombre"
                     placeholder="Nombre del cargo"
-                    value={formData.cargo || ''}
+                    value={formData.nombre || ''}
                     onChange={handleFormChange}
                     required
-                    disabled={!!editingCargo} // Disable cargo name when editing?
                   />
                 </div>
-                 {/* Consider if Cargo name should be editable */} 
-                 {editingCargo && <p className="help is-info">El nombre del cargo no se puede modificar una vez creado.</p>}
               </div>
               {/* Nivel */} 
               <div className="field">
@@ -338,14 +449,16 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
                 <div className="control">
                   <input
                     className="input"
-                    type="text"
+                    type="number"
                     name="nivel"
-                    placeholder="Junior, Senior, N/A..."
-                    value={formData.nivel || ''}
+                    placeholder="0, 1, 2, 3..."
+                    value={formData.nivel ?? ''}
                     onChange={handleFormChange}
                     required
+                    min="0"
                   />
                 </div>
+                <p className="help">Nivel jerárquico del cargo (0 a N, donde 0 es sin nivel)</p>
               </div>
                {/* Sueldo Base */} 
               <div className="field">
@@ -354,9 +467,9 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
                   <input
                     className="input"
                     type="number"
-                    name="sueldoBase"
+                    name="sueldo_base"
                     placeholder="1500"
-                    value={formData.sueldoBase ?? ''} // Handle undefined for number input
+                    value={formData.sueldo_base ?? ''}
                     onChange={handleFormChange}
                     required
                     step="0.01" // Allow decimals for currency
@@ -364,27 +477,18 @@ const GestionCargos: React.FC<GestionCargosProps> = ({ onLogout }) => {
                   />
                 </div>
               </div>
-               {/* Cantidad */} 
-              <div className="field">
-                <label className="label">Cantidad</label>
-                <div className="control">
-                  <input
-                    className="input"
-                    type="number"
-                    name="cantidad"
-                    placeholder="5"
-                    value={formData.cantidad ?? ''} // Handle undefined for number input
-                    onChange={handleFormChange}
-                    required
-                    min="0"
-                  />
-                </div>
-              </div>
             </form>
           </section>
           <footer className="modal-card-foot is-justify-content-flex-end">
-            <button className="button is-success mr-2" type="submit" form="cargo-form">Guardar</button>
-            <button className="button" onClick={closeModal}>Cancelar</button>
+            <button 
+              className={`button is-success mr-2 ${loading ? 'is-loading' : ''}`} 
+              type="submit" 
+              form="cargo-form"
+              disabled={loading}
+            >
+              Guardar
+            </button>
+            <button className="button" onClick={closeModal} disabled={loading}>Cancelar</button>
           </footer>
         </div>
       </div>

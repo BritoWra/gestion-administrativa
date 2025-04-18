@@ -29,6 +29,7 @@ def init_db():
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS cargos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
             nivel INTEGER NOT NULL,
             sueldo_base REAL NOT NULL,
             estatus INTEGER DEFAULT 1

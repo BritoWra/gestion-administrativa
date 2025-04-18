@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FaUserPlus, FaEdit, FaTrash, FaBars, FaSort, FaSortUp, FaSortDown, FaArrowLeft } from 'react-icons/fa';
 import Sidebar from './Sidebar';
 
@@ -19,6 +19,15 @@ interface Empleado {
   telefono?: number;
   correo?: string;
   fecha_nacimiento?: string;
+}
+
+// Define Cargo type 
+interface Cargo {
+  id: number;
+  nombre: string;
+  nivel: number;
+  sueldo_base: number;
+  estatus: number;
 }
 
 // Define sort direction and criteria structure
@@ -44,6 +53,7 @@ const defaultFormState = {
 const API_BASE_URL = 'http://127.0.0.1:5001/api'; // URL base para todas las llamadas API
 
 const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
+  const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [filterColumn, setFilterColumn] = useState<keyof Empleado>('cedula');
   const [filterValue, setFilterValue] = useState('');
@@ -54,6 +64,10 @@ const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Nuevo estado para cargos
+  const [cargos, setCargos] = useState<Cargo[]>([]);
+  const [showNoCargosModal, setShowNoCargosModal] = useState(false);
 
   // Definir columnas para filtrar
   const filterableColumns: { key: keyof Empleado; label: string }[] = [
@@ -63,6 +77,31 @@ const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
     { key: 'sexo', label: 'Sexo' },
     { key: 'fecha_ingreso', label: 'Fecha Ingreso' },
   ];
+
+  // Función para obtener cargos
+  const fetchCargos = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/get/cargos`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      setCargos(data);
+      
+      // Si no hay cargos y el componente se está montando, mostrar el modal
+      if (data.length === 0) {
+        setShowNoCargosModal(true);
+      }
+    } catch (error) {
+      console.error("Error fetching cargos:", error);
+      setError('Error al cargar los datos de los cargos.');
+    }
+  };
+
+  // Obtener cargos al montar el componente
+  useEffect(() => {
+    fetchCargos();
+  }, []);
 
   // Efecto para resetear el formulario cuando el modal se cierra
   useEffect(() => {
@@ -159,6 +198,12 @@ const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
 
   // Manejador para abrir el modal para añadir/editar
   const handleOpenModal = (employee: Empleado | null = null) => {
+    // Verificar si hay cargos disponibles
+    if (cargos.length === 0) {
+      setShowNoCargosModal(true);
+      return;
+    }
+    
     if (employee) {
       setEditingEmployee(employee);
       setFormData({
@@ -173,7 +218,10 @@ const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
       });
     } else {
       setEditingEmployee(null);
-      setFormData(defaultFormState);
+      setFormData({
+        ...defaultFormState,
+        cargo: cargos.length > 0 ? cargos[0].nombre : '' // Establecer el primer cargo como predeterminado
+      });
     }
     setIsModalOpen(true);
   };
@@ -181,6 +229,11 @@ const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
   // Manejador para cerrar el modal
   const handleCloseModal = () => {
     setIsModalOpen(false);
+  };
+
+  // Función para redirigir a la página de gestión de cargos
+  const handleNavigateToCargos = () => {
+    navigate('/gestion-cargos');
   };
 
   // Manejador para cambios en los inputs del formulario
@@ -236,6 +289,7 @@ const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
     if (!formData.cedula) errors.cedula = 'La cédula es requerida.';
     else if (isNaN(Number(formData.cedula))) errors.cedula = 'La cédula debe ser un número.';
     if (!formData.nombre) errors.nombre = 'El nombre es requerido.';
+    if (!formData.cargo) errors.cargo = 'El cargo es requerido.';
     if (formData.fecha_ingreso && !/\d{4}-\d{2}-\d{2}/.test(formData.fecha_ingreso)) errors.fecha_ingreso = 'Formato de fecha inválido (YYYY-MM-DD).';
 
     if (Object.keys(errors).length > 0) {
@@ -285,6 +339,9 @@ const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
         setEmpleados(prev => [...prev, savedEmployee]);
       }
 
+      // Establecer loading a false después de actualizar los datos
+      setLoading(false);
+      
       // Refresh form and modal state
       setFormData(defaultFormState);
       setIsModalOpen(false);
@@ -369,9 +426,6 @@ const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
           </span>
         </button>
       </div>
-
-      {/* Loading Indicator */}
-      {loading && <div className="loading-indicator">Cargando...</div>}
 
       {/* Error Message Display */}
       {error && <div className="error-message-global">Error: {error}</div>}
@@ -459,7 +513,7 @@ const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
                     <td>{emp.nombre}</td>
                     <td>{emp.cargo}</td>
                     <td>{emp.fecha_nacimiento ? calcularEdad(emp.fecha_nacimiento) : '-'}</td>
-                    <td>{emp.sexo || '-'}</td>
+                    <td>{emp.sexo === 'M' ? 'Masculino' : emp.sexo === 'F' ? 'Femenino' : '-'}</td>
                     <td>{formatDateForDisplay(emp.fecha_ingreso)}</td>
                     <td>
                       <button 
@@ -530,19 +584,25 @@ const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
                   />
                 </div>
               </div>
-              {/* Cargo */} 
+              {/* Cargo - Ahora como un select con datos de cargos */} 
                <div className="field">
                 <label className="label">Cargo</label>
                 <div className="control">
-                  <input 
-                    className="input" 
-                    type="text" 
-                    name="cargo" 
-                    placeholder="Desarrollador" 
-                    value={formData.cargo || ''} 
-                    onChange={handleInputChange} 
-                    required 
-                  />
+                  <div className="select is-fullwidth">
+                    <select
+                      name="cargo"
+                      value={formData.cargo || ''}
+                      onChange={handleInputChange}
+                      required
+                    >
+                      <option value="" disabled>Seleccione un cargo</option>
+                      {cargos.map(cargo => (
+                        <option key={cargo.id} value={cargo.nombre}>
+                          {cargo.nombre}{cargo.nivel !== 0 ? ` - Nivel ${cargo.nivel}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
                {/* Fecha de Nacimiento */}
@@ -563,14 +623,17 @@ const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
               <div className="field">
                 <label className="label">Sexo</label>
                 <div className="control">
-                  <input 
-                    className="input" 
-                    type="text" 
-                    name="sexo" 
-                    placeholder="Masculino/Femenino" 
-                    value={formData.sexo || ''} 
-                    onChange={handleInputChange} 
-                  />
+                  <div className="select is-fullwidth">
+                    <select
+                      name="sexo"
+                      value={formData.sexo || ''}
+                      onChange={handleInputChange}
+                    >
+                      <option value="" disabled>Seleccione una opción</option>
+                      <option value="M">Masculino</option>
+                      <option value="F">Femenino</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               {/* Fecha de Ingreso */}
@@ -620,6 +683,31 @@ const GestionEmpleados: React.FC<GestionEmpleadosProps> = ({ onLogout }) => {
             {/* Submit button links to the new form id */}
             <button className="button is-success mr-2" type="submit" form="employee-form">Guardar</button> 
             <button className="button" onClick={handleCloseModal}>Cancelar</button>
+          </footer>
+        </div>
+      </div>
+
+      {/* Modal para advertir que no hay cargos disponibles */}
+      <div className={`modal ${showNoCargosModal ? 'is-active' : ''}`}>
+        <div className="modal-background" onClick={() => setShowNoCargosModal(false)}></div>
+        <div className="modal-card">
+          <header className="modal-card-head">
+            <p className="modal-card-title">Advertencia</p>
+            <button className="delete" aria-label="close" onClick={() => setShowNoCargosModal(false)}></button>
+          </header>
+          <section className="modal-card-body">
+            <div className="content">
+              <h4>No es posible registrar empleados sin cargos creados</h4>
+              <p>Primero debe crear al menos un cargo para poder asignarlo a los empleados.</p>
+            </div>
+          </section>
+          <footer className="modal-card-foot is-justify-content-center">
+            <button 
+              className="button is-primary" 
+              onClick={handleNavigateToCargos}
+            >
+              Ir a Gestión de Cargos
+            </button>
           </footer>
         </div>
       </div>

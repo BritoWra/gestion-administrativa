@@ -1,0 +1,91 @@
+.sidebar-menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 280px; /* Adjust width as needed */
+  height: 100%;
+  background-color: #363636; /* Dark grey background */
+  padding: 20px;
+  box-shadow: -2px 0 5px rgba(0,0,0,0.2);
+  z-index: 1000; /* Ensure it's above other content */
+  transform: translateX(100%);
+  transition: transform 0.3s ease-in-out;
+}
+
+.menu.sidebar-menu {
+    display: block; /* Override Bulma's is-hidden-touch for the component logic */
+    background-color: #363636; /* Ensure override */
+}
+
+.sidebar-menu.is-active {
+  transform: translateX(0);
+}
+
+/* Adjust Bulma menu colors for dark background */
+.sidebar-menu .menu-label {
+    color: #cccccc; /* Lighter grey for labels */
+    text-transform: uppercase;
+    font-size: 0.9em;
+    letter-spacing: 0.1em;
+}
+
+.sidebar-menu .menu-list a {
+    color: #f5f5f5; /* Light text for links */
+    padding: 0.75em 1em;
+    border-radius: 4px;
+}
+
+.sidebar-menu .menu-list a:hover {
+    background-color: #4a4a4a; /* Slightly lighter grey on hover */
+    color: white;
+}
+
+.sidebar-menu .menu-list a .icon-text .icon {
+    color: #cccccc; /* Match label color or adjust */
+}
+
+.sidebar-menu .menu-list a:hover .icon-text .icon {
+    color: white;
+}
+
+/* Ensure logout text color is still visible but indicates danger */
+.sidebar-menu .menu-list a .icon-text.has-text-danger,
+.sidebar-menu .menu-list a:hover .icon-text.has-text-danger {
+    color: #ff6b6b !important; /* Use a light red */
+}
+.sidebar-menu .menu-list a .icon-text.has-text-danger .icon {
+     color: #ff6b6b !important; /* Use a light red */
+}
+
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black */
+  z-index: 999; /* Below sidebar, above content */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+}
+
+.sidebar-overlay.is-active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.sidebar-close-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+}
+
+/* Ensure icon and text align nicely */
+.menu-list a .icon-text .icon {
+    vertical-align: middle;
+    margin-right: 0.5em;
+}
+.menu-list a .icon-text span:last-child {
+    vertical-align: middle;
+}

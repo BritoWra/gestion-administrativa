@@ -1,0 +1,4 @@
+/* Add this rule to make the section take full viewport height */
+.full-height-section {
+  min-height: 100vh;
+}
